@@ -1,0 +1,399 @@
+---
+title: "First_Project"
+output:
+    html_document:
+      toc: true
+      toc_depth: 3
+      toc_float: true
+      number_section: true
+---
+# Load the necessary libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(data.table)
+library(grid)
+library(gridExtra)
+library(cowplot)
+library(GGally)
+```
+
+
+
+```{r library, echo=TRUE, warning=FALSE}
+require(ggplot2)
+require(plyr)
+require(dplyr)
+require(data.table)
+require(grid)
+require(gridExtra)
+require(cowplot)
+require(GGally)
+```
+
+# Created function for read files in dir. 
+Please insert your link in variable "read_files"
+```{r function for read files}
+#Created function for read files in dir. Please insert your link in variable "read_files"
+read_files <- function(link){
+  setwd(link)
+  file_list <- list.files(path=link)
+  dataset <- data.frame()
+  for (i in 1:length(file_list)){
+    temp_data <- fread(file_list[i], stringsAsFactors = F,encoding = "UTF-8") 
+    dataset <- rbindlist(list(dataset, temp_data), use.names = T) 
+  }
+  return(dataset)
+}
+```
+Use function to read files in our dir
+```{r read, warning = FALSE}
+study_data <- read_files("Ссылка на папку с файлами")
+```
+let's see the data structure
+```{r str}
+str(study_data)
+```
+
+# EDA analysis: rename value and column in study_data
+
+```{r EDA analysis}
+study_data <- rename(study_data, Sex = `Sex (1 – male, 2 – female, 3 – uvenil)`)
+unique(study_data$Sex)
+study_data$Sex <- revalue(study_data$Sex, c("1"="male"))
+study_data$Sex <- revalue(study_data$Sex, c("2"="female"))
+study_data$Sex  <- revalue(study_data$Sex, c("3"="uvenil"))
+study_data$Sex  <- revalue(study_data$Sex, c("three"="uvenil"))
+study_data$Sex  <- revalue(study_data$Sex, c("one"="male"))
+head(study_data)
+unique(study_data$Sex)
+unique(study_data$Rings)
+study_data$Rings <- revalue(study_data$Rings, c("nine" = "9"))
+unique(study_data$Rings)
+str(study_data)
+
+```
+We can see, that Sex is not a factor and Length & Rings are not the numeric
+```{r Sex, warning=FALSE}
+study_data$Sex <- as.factor(study_data$Sex)
+study_data$Rings <- as.numeric(study_data$Rings)
+study_data$Length <- as.numeric(study_data$Length)
+str(study_data)
+```
+Now we can check the NA in our dataset
+```{r NA}
+sum(is.na(study_data))
+```
+ So, our dataset has 21 NA, and i think that, we can remove these NA because we have in dataset more then 4000 values and if we remove these NA we won`t to change our data. To be honest, i think to change NA on another values, like median or moda it won't be right, then we talk about a big data 
+We can use na.omit-function 
+```{r}
+study_data <- na.omit(study_data)
+
+```
+Check our result
+```{r}
+sum(is.na(study_data))
+```
+
+# Simple EDA analyses, for all numerical variables. 
+## The grouping factor will be Sex
+### Length
+```{r}
+Length_Box <- ggplot(study_data, aes(y = Length)) + geom_boxplot() + facet_grid(~Sex) + ylab("Length")
+den_L <- ggplot(study_data, aes(x = Length))+
+  geom_density(color="darkblue", fill="lightblue") + facet_grid(~Sex) + ylab("Density") + xlab("Length")
+title <- ggdraw() + draw_label("Graphs for \"Length\" variable")
+plot_row_L <- plot_grid(Length_Box, den_L)
+plot_grid(title,plot_row_L,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see, the length variable is not distributed normally and there are outliers in all groups, which we must take into account in future work.
+
+### Diameter
+```{r}
+Diameter_Box <- ggplot(study_data, aes(y = Diameter)) + 
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Diameter")
+den_D <- ggplot(study_data, aes(x = Diameter))+ 
+  facet_grid(~Sex) + 
+  geom_density(color="darkblue", fill="lightblue")+ 
+  ylab("Density") + 
+  xlab("Diameter")
+title <- ggdraw() + draw_label("Graphs for \"Diameter\" variable")
+plot_row_D <- plot_grid(Diameter_Box, den_D)
+plot_grid(title,plot_row_D,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see, the variable Diameter is not distributed normally and there are outliers in all groups, which we must take into account in future work. But the exception is the "Female" group, where we can see an approximate normal distribution
+### Height
+```{r}
+Height_Box <- ggplot(study_data, aes(y = Height)) +
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Height")
+den_H <- ggplot(study_data, aes(x = Height))+
+  geom_density(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Height") + 
+  facet_grid(~Sex)
+title <- ggdraw() + draw_label("Graphs for \"Height\" variable")
+plot_row_H <- plot_grid(Height_Box, den_H)
+plot_grid(title,plot_row_H,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see from the "Height" variable, there are significant outliers that we need to get rid of.
+```{r}
+study_data <- study_data %>% filter(Height < 0.3)
+which(study_data$Height > 0.3)
+```
+
+Create new graphs
+```{r}
+Height_Box <- ggplot(study_data, aes(y = Height)) +
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Height")
+den_H <- ggplot(study_data, aes(x = Height))+
+  geom_density(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Height") + 
+  facet_grid(~Sex)
+title <- ggdraw() + draw_label("Graphs for \"Height\" variable")
+plot_row_H <- plot_grid(Height_Box, den_H)
+plot_grid(title,plot_row_H,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+Now, we can say that our data on the "height" variable has become more or less clean
+
+### Whole_weight
+```{r}
+Whole_weight_Box <- ggplot(study_data, aes(y = Whole_weight)) +
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Whole_weight")
+den_W_W <- ggplot(study_data, aes(x = Whole_weight))+
+  geom_density(color="darkblue", fill="lightblue")+
+  facet_grid(~Sex)+
+  ylab("Density") + 
+  xlab("Whole_weight")
+title <- ggdraw() + draw_label("Graphs for \"Whole_weight\" variable")
+plot_row_W_W <- plot_grid(Whole_weight_Box, den_W_W)
+plot_grid(title,plot_row_W_W,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see "Whole_weight" variable is not distributed normally and there are outliers in all groups, which we must take into account in future work.
+
+### Shucked_weight
+```{r}
+Shucked_weight_Box <- ggplot(study_data, aes(y = Shucked_weight)) + 
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Shucked_weight")
+den_S_W <- ggplot(study_data, aes(x = Shucked_weight))+
+  geom_density(color="darkblue", fill="lightblue")+
+  facet_grid(~Sex)+
+  ylab("Density") + 
+  xlab("Shucked_weight")
+title <- ggdraw() + draw_label("Graphs for \"Shucked_weight\" variable")
+plot_row_S_W <- plot_grid(Shucked_weight_Box, den_S_W)
+plot_grid(title,plot_row_S_W,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see "Whole_weight" variable is not distributed normally and there are outliers in all groups, which we must take into account in future work.
+
+### Viscera_weight
+```{r}
+Viscera_weight_Box <- ggplot(study_data, aes(y = Viscera_weight)) + 
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Viscera_weight")
+den_V_W <- ggplot(study_data, aes(x = Viscera_weight))+
+  geom_density(color="darkblue", fill="lightblue")+
+  facet_grid(~Sex)+
+  ylab("Density") + 
+  xlab("Viscera_weight")
+title <- ggdraw() + draw_label("Graphs for \"Viscera_weight\" variable")
+plot_row_V_W <- plot_grid(Viscera_weight_Box, den_V_W)
+plot_grid(title,plot_row_V_W,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see "Whole_weight" variable is not distributed normally and there are outliers in all groups, which we must take into account in future work.
+
+### Shell_weight
+```{r}
+Shell_weight_Box <- ggplot(study_data, aes(y = Shell_weight)) + 
+  geom_boxplot()+
+  facet_grid(~Sex)+
+  ylab("Shell_weight")
+den_Sh_W <- ggplot(study_data, aes(x = Shell_weight))+
+  geom_density(color="darkblue", fill="lightblue")+
+  facet_grid(~Sex)+
+  ylab("Density") + 
+  xlab("Shell_weight")
+title <- ggdraw() + draw_label("Graphs for \"Shell_weight\" variable")
+plot_row_Sh_W <- plot_grid(Shell_weight_Box, den_Sh_W)
+plot_grid(title,plot_row_Sh_W,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see "Whole_weight" variable is not distributed normally and there are outliers in all groups, which we must take into account in future work.
+
+## Create a "technical" graph to study the correlation between variables
+
+```{r}
+cor_plot <- study_data[, 3:9]
+ggpairs(cor_plot, corSize = 7)+
+  labs(title = "\"Technical\" correlation graph")
+```
+
+As we can see,most of our variables are correlated. But almost everything is non-linear, but you can see certain patterns that we will consider later.
+
+# Task №3. Calculate the average value and standard deviation of the length variable for shellfish of different group of sex
+
+```{r}
+Answer_3<- study_data %>% group_by(Sex) %>% summarise_at(vars(Length), list (name = mean, sd))
+Answer_3
+```
+
+# Task №4 what percentage of shellfish does the value of the Height variable not exceed 0.165?
+
+```{r}
+Answer_4 <- nrow(study_data %>% filter(study_data$Height < 0.165)) * 100 / nrow(study_data)
+Answer_4
+```
+
+# Task №5 What is the value of the length variable that is greater than 92% of all observations?
+
+```{r}
+Answer_5 <- quantile(study_data$Length, 0.92)
+Answer_5 
+```
+
+# Task №6 Create a new variable Length_z_scores and save the values of the length variable in it after its standardization.
+
+```{r}
+Lenght_z_scores <- scale(study_data$Length)
+```
+
+# Task №7 Compare the diameter of the clams with the number of rings 5 and 15.
+```{r}
+Answer_7 <- study_data %>% filter(Rings == 5 | Rings == 15)
+```
+
+Let's check the normality of the distribution
+
+```{r}
+Answer_7_5 <- study_data %>%  group_by(Rings) %>% 
+  filter(Rings == 5)
+Answer_7_15 <- study_data %>% group_by(Rings) %>% 
+  filter(Rings == 15)
+density_5 <- ggplot(Answer_7_5, aes(x = Diameter))+
+  geom_histogram(binwidth = 0.005, fill = "white", color = "black")+
+  geom_density()+
+  ylab("Count") + 
+  xlab("Diameter of a clam with 5 rings")
+density_15 <- ggplot(Answer_7_15, aes(x = Diameter))+
+  geom_histogram(binwidth = 0.005, fill = "white", color = "black")+
+  geom_density()+
+  ylab("Count") + 
+  xlab("Diameter of a clam with 15 rings")
+
+title <- ggdraw() + draw_label("Distribution of values for mollusks with the number of rings equal to 5 and 15")
+plot_row_5_15 <- plot_grid(density_5, density_15)
+plot_grid(title,plot_row_5_15,ncol = 1, rel_heights=c(0.1, 1))
+```
+
+As we can see, the distribution of variables is not normal. So with what correction to use the t-test for this example.
+Referring to the work of Vorfolomeeva (https://varmara.github.io/mathmethr/02_power.pdf), to use the Welch correction t - test, we need to meet three conditions: 
+
+  1. Observations are random and independent
+  
+  2. Samples are random and independent 
+  
+  3. Normal distribution or sample size is large
+  
+We can use Welch's T-test in this case, since our data is not distributed normally, but a large sample allows us to conduct this type of  t-test.
+
+```{r}
+t.test(Diameter~Rings, Answer_7, paired = FALSE)
+```
+
+As we can see from t-test, the value is p-value. Significantly lower than 0.05, so we can conclude that the diameter of mollusks with 5 rings and 15 is statistically significantly different.
+Now we can visualize our result.
+
+```{r}
+ggplot(Answer_7, aes(x = as.factor(Rings), y = Diameter, fill = as.factor(Rings)))+
+  geom_boxplot()+
+  scale_fill_manual(values=c("#999999", "#E69F00"))+
+  ggtitle("Graph comparing the diameter \n of mollusks with 5 and 15 rings")+
+  labs(x ="Number of rings", y = "Diameter", fill = "Number of rings")+
+  theme(plot.title = element_text(color="black", hjust = 0.5))
+```
+
+# Task № 8 we are particularly interested in the variables Diameter and Whole_weight. What can you say about them?
+
+```{r}
+comp_D_W_W <- study_data %>% select(c(4,6,2))
+cor_D_W_W  <- comp_D_W_W [, 1:2]
+ggpairs(cor_D_W_W, corSize = 7)+
+  labs(title = "Graph of correlation Diametr and Whole_weight ")
+```
+
+As you can see from the graph, we have a relationship between the diameter and the total weight, but the relationship is non-linear. Also, the values themselves are distributed abnormally, so it is necessary to conduct a test to determine the Spearman rank correlation coefficient
+
+```{r}
+cor.test(cor_D_W_W$Diameter,cor_D_W_W$Whole_weight, method = "spearman")
+```
+
+Based on the results of correlation analysis, we can conclude that there is a relationship between the variables diameter and whole_weight (Rho = 0.97, p-value < 0.001).
+
+# Additional task
+## We know that our diameter and total weight data are interrelated. But we can get their linear dependence. To do this, you need to convert one of the data types. Most likely, the diameter is related to the weight of the cubically. So if we extract the cubically root from the mass variable, we can match the data to the volume variable.
+```{r}
+data_with_W_W_conv <- comp_D_W_W %>% mutate(Whole_weight_conv = Whole_weight^(1/3))
+cor_W_W_conv <- data_with_W_W_conv [, c(1,4)]
+ggpairs(cor_W_W_conv, corSize = 7)+
+  labs(title = "Graph of correlation Diametr and Conv_Whole_weight")
+```
+
+As you can see, we have a linear relationship, let's build a graph divided by "Sex" factor
+
+```{r}
+ggplot(data_with_W_W_conv, aes(x = Diameter, y = Whole_weight_conv))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(~Sex)+
+  ggtitle("Linear dependence of the diameter on \n cubic root of whole_weight of the mollusk")+
+  labs(x ="Diameter", y = "Cubic root of whole_weight")+
+  theme(plot.title = element_text(color="black", hjust = 0.5))
+```
+
+##Numbers of rings and Whole_weight
+We can divide the mollusks into three groups based on the number of rings. And can see if there is a difference between the whole_weight and number of rings
+```{r}
+Numb_rings <- study_data %>% 
+  mutate(Numb_ring = case_when(
+    (Rings <= 10) ~ "Young (<=10)",
+    10 < Rings & Rings <= 20 ~ "Middle (10<R<=20)",
+    Rings > 20 ~ "Old (>20)"),
+    Numb_ring = factor(Numb_ring, levels=c("Young (<=10)","Middle (10<R<=20)","Old (>20)")))
+head(Numb_rings)
+
+ggplot(Numb_rings, aes(x = as.factor(Numb_ring), y = Whole_weight, fill = as.factor(Numb_ring))) + 
+  geom_boxplot()+
+  labs(x ="Number of rings", y = "Whole_weight", fill = "Number of rings")+
+  ggtitle("Graph of the whole_weight versus depending on number of rings")+
+  theme(plot.title = element_text(color="black", hjust = 0.5))
+```
+
+Let's compare the following Numbers of rings with the Welch correction using t-test:Young (<=10) and Old (>20)
+
+```{r}
+data_t_test <- Numb_rings %>% filter(Numb_ring == "Young (<=10)"| Numb_ring == "Old (>20)")
+t.test(Whole_weight ~ Numb_ring, data_t_test, paired = FALSE)
+```
+
+As can be seen from the test data, we can talk about a statistically significant difference between old and young mollusks by whole weight whole
