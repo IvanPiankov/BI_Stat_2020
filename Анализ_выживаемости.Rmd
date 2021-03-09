@@ -1,0 +1,218 @@
+---
+title: "Анализ_выживаемости"
+author: 
+date: "07 03 2021"
+output:
+    html_document:
+      toc: true
+      toc_depth: 3
+      toc_float: true
+      number_section: true
+---
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(ggplot2)
+require(dplyr)
+require(survival)
+require(survminer)
+require(ranger)
+require(ggfortify)
+require(coin)
+
+```
+# Описание данных 
+
+ Ovarian - датасет включает в себя пациентов с раком яичников и сопотствующее описание для каждого пациента 
+
+* futtime - время наблюдения, в течение которого пациенты отслеживались до тех пор, пока они не умерли или не были цензурированние
+
+* fustat - подвергался ли пациент цензуре
+
+* age - возраст пациента
+
+* resid.ds - произошла ли супрессия (уменьшение) опухоли
+
+* rx - тип терапии
+
+* ecog.ps - оценка по системе ECOG
+
+
+# EDA 
+## Структура данных.
+```{r}
+data(ovarian)
+
+head(ovarian)
+
+str(ovarian)
+
+summary(ovarian)
+
+```
+
+Трансформируем факторные переменные.
+
+```{r}
+ovarian$rx <- factor(ovarian$rx, 
+                     levels = c("1", "2"), 
+                     labels = c("Therapy A", "Therapy B"))
+ovarian$resid.ds <- factor(ovarian$resid.ds, 
+                           levels = c("1", "2"), 
+                           labels = c("no", "yes"))
+ovarian$ecog.ps <- factor(ovarian$ecog.ps, 
+                          levels = c("1", "2"), 
+                          labels = c("good", "bad"))
+```
+
+Посмотрим на распределение имеющихся переменных.
+```{r}
+Den_for_age <- ggplot(ovarian, aes(x = age)) + geom_density(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Age")
+Den_for_age
+```
+
+Очень похоже на биномиальное распределение, посмотрими без плотности. На обычную гистограмму.
+
+```{r}
+Hist_for_age <- ggplot(ovarian, aes(x = age)) + geom_histogram(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Age")
+Hist_for_age
+
+```
+
+Вроде бы ничего необычного нет. Но все же разделим на молодых и возрастных наши данные. До 50 будут молодые, а дальше возрастные. 
+
+```{r}
+ovarian <- ovarian %>% mutate(age_group = ifelse(age >=50, "old", "young"))
+ovarian$age_group <- factor(ovarian$age_group)
+head(ovarian)
+```
+
+Оценим количество пациентов в группе молодых и возрастных.
+
+```{r}
+sum(ovarian$age_group == "old")
+sum(ovarian$age_group == "young")
+```
+
+Как видно в возрастной группе 20 наблюдений, в то время как в молодой всего 6. Нам необходимо это учесть, поскольку это свидетельствует о разном объеме выборки для разных групп. 
+
+
+Посмотрим на распределение возраста по типу терапии.
+
+```{r}
+Den_for_age_rx <- ggplot(ovarian, aes(x = age)) + geom_density(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Age")+
+  facet_grid(~rx)
+Den_for_age_rx
+```
+
+Как видно из графика, терапия B имеет нормальное распределение по возрасту. В то время как терапия A не имеет четко выделенной возрастной группы.
+
+Оценим распределение пациентов с спрессией опухоли и без нее. 
+
+```{r}
+Den_for_age_res <- ggplot(ovarian, aes(x = age)) + geom_density(color="darkblue", fill="lightblue")+
+  ylab("Density") + 
+  xlab("Age")+
+  facet_grid(~resid.ds)
+Den_for_age_res
+```
+
+Здесь мы наблюдаем распределение отдаленно напоминающее нармальное.
+
+
+
+
+# Построение кривых Каплана - Майера
+
+Создадим объект для построения кривых Каплана-Майера
+```{r}
+surv_object <- Surv(time = ovarian$futime, event = ovarian$fustat)
+surv_object 
+```
+Значения имеющие "+" это те значения, которые в ходе эксперемената подверглись цензуре.
+
+## Тип лечения
+Для начала построим кривые в зависимости от типа лечения.
+
+```{r}
+fit_1 <- survfit(surv_object ~ rx, data = ovarian)
+summary(fit_1)
+ggsurvplot(fit_1, data = ovarian, pval = TRUE)
+```
+
+Как видно из графика в первые месяцы наблюдений пациентов Терапии B выживала больше, но потом все выравнилось. Можно сделать вывод, основывась на значении p = 0.3, что разницы в терапиях нет. 
+
+## Супрессия опухоли
+
+Посмотроим кривую для пациентов у которых осталось опухоль и которых она уменьшиалсь.
+
+```{r}
+fit_2 <- survfit(surv_object ~ resid.ds, data = ovarian)
+ggsurvplot(fit_2, data = ovarian, pval = TRUE)
+```
+
+Здесь ситуация уже иная, на первый взгляд, кажется, что различия есть, но согласно значению p = 0.057, статистически значимых различий между двумя группами нет. 
+
+
+## Распределение по возрасту 
+
+```{r}
+fit_3 <- survfit(surv_object ~ age_group, data = ovarian)
+ggsurvplot(fit_3, data = ovarian, pval = TRUE)
+```
+
+На данном графике также нет статистически значимых различий между группами, однако, можно сказать, что вероятность выжить в группе молодых резко падает единовременно. Возможно это связано с маленьким количеством значений в группе молодых. Поэтому какая либо смерть пациента будет давать резкое падение вероятности выжить. 
+
+## Оценка ECOG
+
+Посмотрим, как влияет на вероятность выживаемости состояние пациента по стандартам ECOG
+
+```{r}
+fit_4 <- survfit(surv_object ~ ecog.ps, data = ovarian)
+ggsurvplot(fit_4, data = ovarian, pval = TRUE)
+```
+
+Как видно на графике, оценка состоянии ECOG свидетельствующая о улучшении состояния больного не влият на вероятность его выживаемости. 
+
+# Лог-ранк тесты
+
+Сравним лог-ранк тесты для всех возможных факторов. 
+
+```{r}
+logrank_test(surv_object ~ rx, data = ovarian)
+logrank_test(surv_object ~ resid.ds, data = ovarian)
+logrank_test(surv_object ~ ecog.ps, data = ovarian)
+logrank_test(surv_object ~ age_group, data = ovarian)
+```
+
+Как видно по результатом лог-ранк тестирования (значение его также указаны на кривых Каплана-Майера). Статистически значемых различий для различных групп разделенных по следующим признакам: тип терапии, супрессия опухоли, возраст и оценка состояния по ECOG, не было обнаружено. 
+
+
+# Анализ факторов, влияющих на риск (модель Кокса)
+
+```{r}
+cox <- coxph(surv_object ~ rx + resid.ds + age_group + ecog.ps, 
+                   data = ovarian)
+summary(cox)
+
+aa_fit <- aareg(surv_object ~ rx + resid.ds + age_group + ecog.ps, data = ovarian)
+autoplot(aa_fit)
+```
+
+```{r}
+ggforest(cox, data = ovarian)
+```
+
+* Согласно модели Кокса риск смерти понижается для пациентов проходящих терапию B, и если их возраст меньше 50 лет.
+
+* Для пациентов у которых после лечения супрессия опухоли не наблюдается, статистически значимо повышается риск умереть. 
+
+* Интересным является тот факт, что оценка состояние ECOG  не влият на риск смерти. 
+
